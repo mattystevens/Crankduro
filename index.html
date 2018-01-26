@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+  <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.datatables.net/1.10.16/css/jquery.dataTables.min.css">
+  <script src="https://cdn.datatables.net/1.10.16/js/jquery.dataTables.min.js"></script>
+  <script src="cellEdit.js"></script>
+
+
+  <style>
+    .row {
+      margin-bottom: 20px;
+    }
+	
+	.spacer10 {
+	  height: 10px;
+	}
+  </style>
+
+  <script>
+    $(document).ready(function(){
+     
+      var bearer = "";
+      var clubId = 304545;
+      //var segments = [12508189];
+      //var segments = [4066439,4831219]; // Srugis's Wall, Cranbrook Exit Climb
+	  var segments = [];
+      var dateRange = "this_week" //this_week
+      var pointsTo = 10;
+      var efforts = [];
+      var table;
+	  var table2;
+      //var editor; // use a global for the submit and return data rendering in the examples
+      var athletes = [];
+      
+	  /********Datatables events*************/
+	  
+      $("#sendit").click(function(){
+        $.when(getMyStarredSegments()).then(function(){
+			$.when(getSegmentEfforts()).then(function(){
+				console.log('drawing');
+				table = $('#results').DataTable({
+					data: efforts,
+					columns: [
+						{"data": "segment_name"},
+						{"data": "athlete_name"},
+						{"data": "elapsed_time"},
+						{"data": "rank"}
+					]
+				});
+				$('#results').removeClass('hidden').addClass('display');
+
+				table.MakeCellsEditable({
+				    "onUpdate": cellEditCallback,
+					"columns": [1]
+				});				
+			});
+		});
+      });
+	  
+	  $("#crunchit").click(function(){
+	      console.log('clicked crunchit');
+		  console.log(efforts);
+		  countEfforts();
+		  console.log("after mark countEfforts");
+		  console.log(athletes);
+		  table2 = $('#scores').DataTable({
+		      data: athletes,
+			  columns: [
+			      {"data": "athlete_name"},
+				  {"data": "segmentsCompleted"},
+				  {"data": "totalTime"}
+			  ]
+		  });
+		  $('#scores').removeClass('hidden').addClass('display');
+          $('html, body').animate({
+		      scrollTop: $("#scores").offset().top
+		  }, 2000);
+      });
+      
+	  function countEfforts(){
+	      for (a=0; a<efforts.length; a++){
+		      var athleteName = efforts[a].athlete_name;
+			  for (b=0; b<athletes.length; b++){
+			      if (athleteName === athletes[b].athlete_name){
+				      athletes[b].segmentsCompleted++;
+					  athletes[b].totalTime = athletes[b].totalTime + efforts[a].elapsed_time;
+					  athleteName = '';
+				  }
+			  }
+		      if (athleteName != ''){
+			      athletes.push({
+				      athlete_name: athleteName,
+					  segmentsCompleted: 1,
+					  totalTime: efforts[a].elapsed_time
+				  });
+			  }
+		  }
+	  }
+	  
+	  function cellEditCallback (updatedCell, updatedRow, oldValue) {
+        console.log("The new value for the cell is: " + updatedCell.data());
+        console.log("The values for each cell in that row are: " + updatedRow.data());
+      }
+	  
+	  function getMyStarredSegments(){
+	      var dfd = $.Deferred();
+		  $.ajax({
+              url: 'https://www.strava.com/api/v3/segments/starred',
+			  headers: {Accept: 'application/json', 'Authorization': 'Bearer ' + bearer},
+		  })
+		  .done(function(data){
+		      //console.log('getMyStarredSegments success');
+		      //console.log(data);
+			  for (a=0; a<data.length; a++){
+			      segments.push({id: data[a].id,
+				                 name: data[a].name});
+			  }
+			  console.log(segments);
+			  dfd.resolve();
+		  })
+		  .fail()
+		  .always(function(data){
+		      //console.log('getMyStarredSegments always');
+
+		  });
+	      return dfd.promise();
+	  }
+	  
+      function getSegmentEfforts(){
+          var dfd = $.Deferred(); 
+          for (a=0; a<segments.length; a++){
+              var segmentId = segments[a].id;
+			  var segmentName = segments[a].name;
+              var page = 1;
+              $.ajax({
+                  url: 'https://www.strava.com/api/v3/segments/' + segmentId + '/leaderboard?per_page=200&page=' + page + '&club_id=' + clubId + '&date_range=' + dateRange,
+                  headers: {Accept: 'application/json', 'Authorization': 'Bearer ' + bearer},
+                  async: false,
+                  success: function(data){
+                      console.log('success');
+                      var bodyJson = data;
+                      for (b=0; b<bodyJson.entries.length; b++){
+                          efforts.push({segment_name: segmentName,
+						                segment: segmentId, 
+                                 	    athlete_name: bodyJson.entries[b].athlete_name,
+                                 	    elapsed_time: bodyJson.entries[b].elapsed_time,
+                                 	    rank: bodyJson.entries[b].rank});
+                      }
+                      console.log(efforts);
+                  },
+                  fail: function(){
+                  }
+              }).always(function(){
+                      console.log("in always: a: " + a);
+                      console.log("segments.length - 1: " + (segments.length - 1));
+                      if (a == segments.length - 1)
+                          dfd.resolve();
+                  });
+          }
+          return dfd.promise();
+      }
+      
+      
+    });  
+  </script> 
+</head>
+<body>
+
+  <div class="col-md-6 col-md-offset-3">
+    <div class="row">
+      <div class="control-group">
+        <h2>CrankDuro</h2>
+        <p>A friendly group ride for all the glory.</p>
+		<div class="col-sm-offset-4 col-sm-1">
+          <button type="button" class="btn btn-primary" id="sendit">SEND IT</button>
+		</div>
+		<div class="col-sm-offset-1 col-sm-1">
+          <button type="button" class="btn btn-success" id="crunchit">CRUNCH DEM NUMBAS</button>
+		</div>
+      </div>
+    </div>
+	
+    <div class="row">
+      <table id="results" class="hidden" cellspacing="0" width="100%">
+	    <caption>The Raw Results</caption>
+        <thead>
+          <tr>
+          <th>Segment</th>
+          <th>Racer</th>
+          <th>Time</th>
+          <th>Segment Rank</th>
+          </tr>
+        </thead>
+        <tbody>
+        </tbody>
+      </table>
+    </div>
+	
+    <div class="row spacer10"></div>
+    <div class="row spacer10"></div>
+    <div class="row spacer10"></div>
+	
+	<div class="row">
+	<div class="col-sm-offset-3 col-sm-6">
+      <table id="scores" class="hidden" cellspacing="0" width="100%">
+	  <caption>The Goods</caption>
+        <thead>
+          <tr>
+          <th>Racer</th>
+          <th>Segments Finished</th>
+          <th>Total Time</th>
+          </tr>
+        </thead>
+        <tbody>
+        </tbody>
+      </table>
+    </div>
+	</div>
+	
+  </div>
+
+</body>
+</html>
