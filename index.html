@@ -1,431 +1,462 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
-  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
-  <!--script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script-->
-  <!--link rel="stylesheet" href="https://cdn.datatables.net/1.10.16/css/jquery.dataTables.min.css"-->
-  <!--script src="https://cdn.datatables.net/1.10.16/js/jquery.dataTables.min.js"></script-->
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+    <!--script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script-->
+    <!--link rel="stylesheet" href="https://cdn.datatables.net/1.10.16/css/jquery.dataTables.min.css"-->
+    <!--script src="https://cdn.datatables.net/1.10.16/js/jquery.dataTables.min.js"></script-->
+    <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/v/bs/dt-1.10.16/datatables.min.css" />
+    <script type="text/javascript" src="https://cdn.datatables.net/v/bs/dt-1.10.16/datatables.min.js"></script>
+    <script src="cellEdit.js"></script>
+    <style>
+        .row {
+            margin-bottom: 20px;
+        }
+        .spacer10 {
+            height: 10px;
+        }
+        caption {
+            font-size: 1.875em;
+        }
+    </style>
+    <script>
+        $(document).ready(function() {
+            //$("#results_wrapper,#scores_wrapper").hide();
+            var raceStart; // = new Date("2018-01-26T00:00:00Z").valueOf();
+            var raceEnd; // = new Date("2018-01-27T00:00:00Z").valueOf();
+            var bearer = "";
+            var clubId = 304545;
+            //var segments = [12508189];
+            //var segments = [4066439,4831219]; // Srugis's Wall, Cranbrook Exit Climb
+            var segments = [];
+            var dateRange = "this_year" //this_week
+            var pointsTo = 10;
+            var efforts = [];
+            var table;
+            var table2;
+            //var editor; // use a global for the submit and return data rendering in the examples
+            var athletes = [];
+            var clubMembers = [];
+            var dupeNames = [];
+            var dupeNamesInEffortTable = false;
 
-  <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/v/bs/dt-1.10.16/datatables.min.css"/>
-  <script type="text/javascript" src="https://cdn.datatables.net/v/bs/dt-1.10.16/datatables.min.js"></script>
-  <script src="cellEdit.js"></script>
+            $("#raceStart").val(new Date());
+            $("#raceEnd").val(new Date());
+
+            /********Datatables events*************/
+
+            $("#sendit").click(function() {
+                segments = [];
+                efforts = [];
+                athletes = [];
+                clubMembers = [];
+                dupeNames = [];
+                dupeNamesInEffortTable = false;
+                //$('#results,#scores').removeClass('display').addClass('hidden');
+                $("#results_wrapper,#scores_wrapper,#crunchit_container,#dupleLabel_container").hide();
+
+                $.when(getMyStarredSegments()).then(function() {
+                    console.log("***my stared segments***");
+                    console.log(segments);
+                    $.when(getClubMembers()).then(function() {
+                        console.log("***club members***");
+                        console.log(clubMembers);
+                        console.log("***club members with same name***");
+                        console.log(dupeNames);
+                        $.when(getSegmentEfforts()).then(function() {
+                            console.log("***segment efforts***");
+                            console.log(efforts);
+                            console.log('drawing');
+                            if ($.fn.dataTable.isDataTable('#results')) {
+                                table.clear();
+                                table.rows.add(efforts);
+                                table.draw();
+                            } else {
+                                table = $('#results').DataTable({
+                                    data: efforts,
+                                    columns: [{
+                                            "title": "Segment",
+                                            "data": "segment_name"
+                                        },
+                                        {
+                                            "title": "Racer",
+                                            "data": "athlete_name"
+                                        },
+                                        {
+                                            "title": "Segment Time",
+                                            "data": "elapsed_time"
+                                        },
+                                        {
+                                            "title": "Segment Rank",
+                                            "data": "rank"
+                                        },
+                                        {
+                                            "title": "Duplicate Name",
+                                            "data": "duplicateName",
+                                            "visible": false
+                                        }
+                                    ],
+                                    "dom": '<"top"i>rt<"bottom"flp><"clear">',
+                                    "pageLength": 100,
+                                    "createdRow": function(row, data, dataIndex) {
+                                        var data4 = data[4];
+                                        if (data.duplicateName == true)
+                                            $(row).addClass('warning text-white');
+                                    }
+                                });
+                            }
+                            //$('#results').removeClass('hidden').addClass('display');
+                            $("#results_wrapper").show();
+                            $('#results:not(:has(caption))').prepend('<caption class="text-primary">Segment Efforts</caption>');
+                            table.columns.adjust().draw();
+                            $("#crunchit_container").removeClass("hidden").show();
+                            if (dupeNamesInEffortTable)
+                                $("#dupleLabel_container").removeClass("hidden").show();
+                            table.MakeCellsEditable({
+                                "onUpdate": cellEditCallback,
+                                "columns": [1]
+                            });
+                        });
+                    });
+                });
+            });
+
+            $("#crunchit").click(function() {
+                athletes = [];
+                console.log('clicked crunchit');
+                console.log(efforts);
+                buildResults();
+                console.log("after mark buildResults");
+                console.log(athletes);
+                if ($.fn.dataTable.isDataTable('#scores')) {
+                    table2.clear();
+                    table2.rows.add(athletes);
+                    table2.draw();
+                } else {
+                    table2 = $('#scores').DataTable({
+                        data: athletes,
+                        columns: [{
+                                "title": "Racer",
+                                "data": "athlete_name"
+                            },
+                            {
+                                "title": "Segments Finished",
+                                "data": "segmentsCompleted"
+                            },
+                            {
+                                "title": "Total Time",
+                                "data": "totalTime"
+                            },
+                            {
+                                "title": "Place",
+                                "data": "finalRank"
+                            }
+                        ],
+                        "dom": '<"top"i>rt<"bottom"flp><"clear">',
+                        "pageLength": 100,
+                        "createdRow": function(row, data, dataIndex) {
+                            switch (data.finalRank) {
+                                case 1:
+                                    $(row).addClass('success text-white');
+                                    break;
+                                case 'DNF':
+                                    $(row).addClass('warning text-white');
+                                    break;
+                            }
+
+                        }
+                    });
+                }
+                //$('#scores').removeClass('hidden').addClass('display');
+                $("#scores_wrapper").show();
+                $('#scores:not(:has(caption))').prepend('<caption class="text-success">Results</caption>');
+                table2.columns.adjust().draw();
+
+                $('html, body').animate({
+                    scrollTop: $("#scores").offset().top
+                }, 1200);
+            });
+
+            function getClubMembers() {
+                var dfd = $.Deferred();
+                $.ajax({
+                        url: 'https://www.strava.com/api/v3/clubs/' + clubId + '/members?per_page=200',
+                        headers: {
+                            Accept: 'application/json',
+                            'Authorization': 'Bearer ' + bearer
+                        },
+                    })
+                    .done(function(data) {
+                        for (a = 0; a < data.length; a++) {
+                            var displayName;
+                            if (data[a].lastname)
+                                displayName = capitalizeFirstLetter(data[a].firstname) + ' ' + capitalizeFirstLetter(data[a].lastname.substring(0, 1)) + '.';
+                            else
+                                displayName = capitalizeFirstLetter(data[a].firstname);
+                            if (data[a].id != 0)
+                                clubMembers.push({
+                                    id: data[a].id,
+                                    firstname: data[a].firstname,
+                                    lastname: data[a].lastname,
+                                    displayname: displayName
+                                });
+                        }
+                        var sortedClubMembers = clubMembers.slice().sort(function(a, b) {
+                            if (a.displayname < b.displayname)
+                                return -1;
+                            if (a.displayname > b.displayname)
+                                return 1;
+                            return 0;
+                        });
+                        //console.log('SORTED CLUB MEMBERS');
+                        //console.log(sortedClubMembers);
+                        //console.log('COMPARING CLUB MEMBERS NAMES');
+
+                        for (a = 0; a < sortedClubMembers.length - 1; a++) {
+                            //console.log(sortedClubMembers[a + 1].displayname + " : " + sortedClubMembers[a].displayname);
+                            if (sortedClubMembers[a + 1].displayname == sortedClubMembers[a].displayname) {
+                                dupeNames.push(sortedClubMembers[a].displayname);
+                                //console.log("MATCH");
+                            }
+                        }
 
 
-  <style>
-    .row {
-      margin-bottom: 20px;
-    }
-	.spacer10 {
-	  height: 10px;
-	}
-	caption {
-	  font-size: 1.875em;
-	}
-  </style>
+                        dfd.resolve();
+                    })
+                    .fail()
+                    .always();
+                return dfd.promise();
+            }
 
-  <script>
-    $(document).ready(function(){
-	  //$("#results_wrapper,#scores_wrapper").hide();
-      var raceStart; // = new Date("2018-01-26T00:00:00Z").valueOf();
-	  var raceEnd; // = new Date("2018-01-27T00:00:00Z").valueOf();
-      var bearer = "";
-      var clubId = 304545;
-      //var segments = [12508189];
-      //var segments = [4066439,4831219]; // Srugis's Wall, Cranbrook Exit Climb
-	  var segments = [];
-      var dateRange = "this_year" //this_week
-      var pointsTo = 10;
-      var efforts = [];
-      var table;
-	  var table2;
-      //var editor; // use a global for the submit and return data rendering in the examples
-      var athletes = [];
-	  var clubMembers = [];
-	  var dupeNames = [];
-	  var dupeNamesInEffortTable = false;
-      
-	  $("#raceStart").val(new Date());
- 	  $("#raceEnd").val(new Date());
+            function buildResults() {
+                for (a = 0; a < efforts.length; a++) {
+                    var athleteName = efforts[a].athlete_name;
 
-	  
-	  /********Datatables events*************/
-	  
-      $("#sendit").click(function(){
-	    segments = [];
-		efforts = [];
-		athletes = [];
-		clubMembers = [];
-		dupeNames = [];
-		dupeNamesInEffortTable = false;
-		//$('#results,#scores').removeClass('display').addClass('hidden');
-	    $("#results_wrapper,#scores_wrapper,#crunchit_container,#dupleLabel_container").hide();
-        
-        $.when(getMyStarredSegments()).then(function(){
-		    console.log("***my stared segments***");
-            console.log(segments);
-			$.when(getClubMembers()).then(function(){
-				console.log("***club members***");
-				console.log(clubMembers);
-				console.log("***club members with same name***");
-				console.log(dupeNames);
-			    $.when(getSegmentEfforts()).then(function(){
-				    console.log("***segment efforts***");
-				    console.log(efforts);
-					console.log('drawing');
-					if ($.fn.dataTable.isDataTable('#results')){
-						table.clear();
-						table.rows.add(efforts);
-						table.draw();
-					}
-					else {
-						table = $('#results').DataTable({
-							data: efforts,
-							columns: [
-								{"title":"Segment","data": "segment_name"},
-								{"title":"Racer","data": "athlete_name"},
-								{"title":"Segment Time","data": "elapsed_time"},
-								{"title":"Segment Rank","data": "rank"},
-								{"title":"Duplicate Name","data":"duplicateName","visible":false}
-							],
-							"dom": '<"top"i>rt<"bottom"flp><"clear">',
-							"pageLength": 100,
-							"createdRow": function(row, data, dataIndex){
-							    var data4 = data[4];
-							    if (data.duplicateName == true)
-								    $(row).addClass('warning text-white');
-							}
-						});
-					}
-					//$('#results').removeClass('hidden').addClass('display');
-					$("#results_wrapper").show();
-					$('#results:not(:has(caption))').prepend('<caption class="text-primary">Segment Efforts</caption>');
-					table.columns.adjust().draw();
-					$("#crunchit_container").removeClass("hidden").show();
-					if (dupeNamesInEffortTable)
-					    $("#dupleLabel_container").removeClass("hidden").show();
-					table.MakeCellsEditable({
-						"onUpdate": cellEditCallback,
-						"columns": [1]
-					});	
-				});
-			});
-		});
-      });
-	  
-	  $("#crunchit").click(function(){
-	      athletes = [];
-	      console.log('clicked crunchit');
-		  console.log(efforts);
-		  buildResults();
-		  console.log("after mark buildResults");
-		  console.log(athletes);
-		  if ($.fn.dataTable.isDataTable('#scores')){
-				    table2.clear();
-					table2.rows.add(athletes);
-					table2.draw();
-		  }
-		  else {
-			  table2 = $('#scores').DataTable({
-				  data: athletes,
-				  columns: [
-					  {"title":"Racer","data": "athlete_name"},
-					  {"title":"Segments Finished","data": "segmentsCompleted"},
-					  {"title":"Total Time","data": "totalTime"},
-					  {"title":"Place","data":"finalRank"}
-				  ],
-				  "dom": '<"top"i>rt<"bottom"flp><"clear">',
-				  "pageLength": 100,
-				  "createdRow": function(row, data, dataIndex){
-				      switch(data.finalRank){
-					      case 1:
-						      $(row).addClass('success text-white');
-							  break;
-					      case 'DNF':
-						      $(row).addClass('warning text-white');
-							  break;
-				      }
-					  
-				  }
-			  });
-		  }
-		  //$('#scores').removeClass('hidden').addClass('display');
-		  $("#scores_wrapper").show();
-          $('#scores:not(:has(caption))').prepend('<caption class="text-success">Results</caption>');
-		  table2.columns.adjust().draw();
+                    for (b = 0; b < athletes.length; b++) {
+                        if (athleteName === athletes[b].athlete_name) {
+                            athletes[b].segmentsCompleted++;
+                            athletes[b].totalTime = athletes[b].totalTime + efforts[a].elapsed_time;
+                            athleteName = '';
+                        }
+                    }
+                    if (athleteName != '') {
+                        athletes.push({
+                            athlete_name: athleteName,
+                            segmentsCompleted: 1,
+                            totalTime: efforts[a].elapsed_time,
+                            finalRank: ''
+                        });
+                    }
+                }
 
-          $('html, body').animate({
-		      scrollTop: $("#scores").offset().top
-		  }, 1200);
-      });
-      
-	  function getClubMembers(){
-	      var dfd = $.Deferred();
-		  $.ajax({
-		      url: 'https://www.strava.com/api/v3/clubs/' + clubId + '/members?per_page=200',
-			  headers: {Accept: 'application/json', 'Authorization': 'Bearer ' + bearer},
-		  })
-		  .done(function(data){
-		      for (a=0; a<data.length; a++){
-			    var displayName;
-				if (data[a].lastname)
-			        displayName = capitalizeFirstLetter(data[a].firstname) + ' ' + capitalizeFirstLetter(data[a].lastname.substring(0,1)) + '.';
-			    else 
-				    displayName = capitalizeFirstLetter(data[a].firstname);
-				if (data[a].id != 0)
-				    clubMembers.push({
-					    id: data[a].id,
-						firstname: data[a].firstname,
-						lastname: data[a].lastname,
-						displayname: displayName
-					});
-			  }
-			  var sortedClubMembers = clubMembers.slice().sort(function(a,b){
-			      if (a.displayname < b.displayname)
-				      return -1;
-				  if (a.displayname > b.displayname)
-				      return 1;
-				  return 0;
-			  });
-			  //console.log('SORTED CLUB MEMBERS');
-			  //console.log(sortedClubMembers);
-  			  //console.log('COMPARING CLUB MEMBERS NAMES');
+                //mark dnfs
+                for (a = 0; a < athletes.length; a++) {
+                    console.log("segments.length:" + segments.length);
+                    var finalRank = "";
+                    console.log("athletes[a]");
+                    console.log(athletes[a]);
+                    if (athletes[a].segmentsCompleted < segments.length)
+                        finalRank = "DNF";
+                    athletes[a].finalRank = finalRank;
+                    console.log(athletes[a]);
+                }
 
-			  for (a=0; a<sortedClubMembers.length - 1; a++){
-			      //console.log(sortedClubMembers[a + 1].displayname + " : " + sortedClubMembers[a].displayname);
-			      if (sortedClubMembers[a + 1].displayname == sortedClubMembers[a].displayname){
-				      dupeNames.push(sortedClubMembers[a].displayname);
-				      //console.log("MATCH");
-				  }
-			  }
-			  
-			  
-		      dfd.resolve();
-		  })
-		  .fail()
-		  .always();
-		  return dfd.promise();
-	  }
-	  
-	  function buildResults(){
-	      for (a=0; a<efforts.length; a++){
-		      var athleteName = efforts[a].athlete_name;
-			  
-			  for (b=0; b<athletes.length; b++){
-			      if (athleteName === athletes[b].athlete_name){
-				      athletes[b].segmentsCompleted++;
-					  athletes[b].totalTime = athletes[b].totalTime + efforts[a].elapsed_time;
-					  athleteName = '';
-				  }
-			  }
-		      if (athleteName != ''){
-			      athletes.push({
-				      athlete_name: athleteName,
-					  segmentsCompleted: 1,
-					  totalTime: efforts[a].elapsed_time,
-					  finalRank: ''
-				  });
-			  }
-		  }
-		  
-		  //mark dnfs
-		  for (a=0; a<athletes.length; a++){
-		      console.log("segments.length:" + segments.length);
-		      var finalRank = "";
-			  console.log("athletes[a]");
- 			  console.log(athletes[a]);
-			  if (athletes[a].segmentsCompleted < segments.length)
-			      finalRank = "DNF";
-			  athletes[a].finalRank = finalRank;
-			  console.log(athletes[a]);
-		  }
-		  
-		  //copy array without DNFs
-		  var noDNFs = athletes.filter(function(obj){
-		      return obj.finalRank !== 'DNF';
-		  });
-		  console.log("noDNFs");
-		  console.log(noDNFs);
-		  
-		  //sort dnf athletes
-		  noDNFs = noDNFs.slice().sort(function(a,b){
-		      if (a.totalTime < b.totalTime)
-			      return -1;
-			  if (a.totalTime > b.totalTime)
-			      return 1;
-			  return 0;
-		  });
-		  console.log("noDNFs sorted");
-		  console.log(noDNFs);
-		  
-		  //build array of ranks
-		  //var ranks = $.grep(noDNFs, function(item,idx){
-		  //    console.log("WHAT IS noNDFs in my grep?");
-		  //    console.log(noDNFs);
-		  //    return item.totalTime != noDNFs[idx - 1].totalTime;
-		  //});
-		  
-		  var ranks = removeDuplicates(noDNFs,"totalTime");
-		  
-		  console.log('ranks');
-		  console.log(ranks);
-		  
-		  //loop through athletes and assign ranks
-		  $.each(athletes, function(idx, item){
-		      var rank;
-			  if (item.finalRank != "DNF"){
-			      rank = ranks.findIndex(p => p.totalTime == item.totalTime) + 1;
-				  item.finalRank = rank;
-			  }
-		  });
-		  
-	  }
-	  
-	  function cellEditCallback (updatedCell, updatedRow, oldValue) {
-        console.log("The new value for the cell is: " + updatedCell.data());
-        console.log("The values for each cell in that row are: " + updatedRow.data());
-      }
-	  
-	  function getMyStarredSegments(){
-	      var dfd = $.Deferred();
-		  $.ajax({
-              url: 'https://www.strava.com/api/v3/segments/starred',
-			  headers: {Accept: 'application/json', 'Authorization': 'Bearer ' + bearer},
-		  })
-		  .done(function(data){
-		      //console.log('getMyStarredSegments success');
-		      //console.log(data);
-			  for (a=0; a<data.length; a++){
-			      segments.push({id: data[a].id,
-				                 name: data[a].name});
-			  }
-			  //console.log(segments);
-			  dfd.resolve();
-		  })
-		  .fail()
-		  .always(function(data){
-		      //console.log('getMyStarredSegments always');
+                //copy array without DNFs
+                var noDNFs = athletes.filter(function(obj) {
+                    return obj.finalRank !== 'DNF';
+                });
+                console.log("noDNFs");
+                console.log(noDNFs);
 
-		  });
-	      return dfd.promise();
-	  }
-	  
-      function getSegmentEfforts(){
-          var dfd = $.Deferred(); 
-          for (a=0; a<segments.length; a++){
-              var segmentId = segments[a].id;
-			  var segmentName = segments[a].name;
-			  raceStart = new Date($("#raceStart").val()).valueOf();
-			  raceEnd = new Date($("#raceEnd").val()).valueOf();
-              var page = 1;
-              $.ajax({
-                  url: 'https://www.strava.com/api/v3/segments/' + segmentId + '/leaderboard?per_page=200&page=' + page + '&club_id=' + clubId + '&date_range=' + dateRange,
-				  headers: {Accept: 'application/json', 'Authorization': 'Bearer ' + bearer},
-                  async: false,
-                  success: function(data){
-                      //console.log('success');
-					  var effortItemStart;
-                      var bodyJson = data;
-                      for (b=0; b<bodyJson.entries.length; b++){
-					  	  var isDupeName = ($.inArray(bodyJson.entries[b].athlete_name, dupeNames) >= 0) ? true : false;
-					      //console.log('a single segment effort');
-						  //console.log(bodyJson.entries[b]);
-						  effortItemStart = new Date(bodyJson.entries[b].start_date_local).valueOf();
-						  
-						  if (effortItemStart > raceStart && effortItemStart < raceEnd){
-						      if (isDupeName)
-							      dupeNamesInEffortTable = true;
-                              efforts.push({segment_name: segmentName,
-						                    segment: segmentId, 
-                                     	    athlete_name: bodyJson.entries[b].athlete_name,
-                                     	    elapsed_time: bodyJson.entries[b].elapsed_time,
-                                     	    rank: bodyJson.entries[b].rank,
-											duplicateName: isDupeName
-							  });
-						  }
-                      }
-                      //console.log(efforts);
-                  },
-                  fail: function(){
-                  }
-              }).always(function(){
-                      //console.log("in always: a: " + a);
-                      //console.log("segments.length - 1: " + (segments.length - 1));
-                      if (a == segments.length - 1)
-                          dfd.resolve();
-                  });
-          }
-          return dfd.promise();
-      }
-      
-      
-    });
+                //sort dnf athletes
+                noDNFs = noDNFs.slice().sort(function(a, b) {
+                    if (a.totalTime < b.totalTime)
+                        return -1;
+                    if (a.totalTime > b.totalTime)
+                        return 1;
+                    return 0;
+                });
+                console.log("noDNFs sorted");
+                console.log(noDNFs);
 
-    function capitalizeFirstLetter(string) {
-      return string.charAt(0).toUpperCase() + string.slice(1);
-    }	
-	
-	function removeDuplicates(myArr, prop) {
-        return myArr.filter((obj, pos, arr) => {
-            return arr.map(mapObj => mapObj[prop]).indexOf(obj[prop]) === pos;
-    });
-}
-	
-  </script> 
+                //build array of ranks
+                //var ranks = $.grep(noDNFs, function(item,idx){
+                //    console.log("WHAT IS noNDFs in my grep?");
+                //    console.log(noDNFs);
+                //    return item.totalTime != noDNFs[idx - 1].totalTime;
+                //});
+
+                var ranks = removeDuplicates(noDNFs, "totalTime");
+
+                console.log('ranks');
+                console.log(ranks);
+
+                //loop through athletes and assign ranks
+                $.each(athletes, function(idx, item) {
+                    var rank;
+                    if (item.finalRank != "DNF") {
+                        rank = ranks.findIndex(p => p.totalTime == item.totalTime) + 1;
+                        item.finalRank = rank;
+                    }
+                });
+
+            }
+
+            function cellEditCallback(updatedCell, updatedRow, oldValue) {
+                console.log("The new value for the cell is: " + updatedCell.data());
+                console.log("The values for each cell in that row are: " + updatedRow.data());
+            }
+
+            function getMyStarredSegments() {
+                var dfd = $.Deferred();
+                $.ajax({
+                        url: 'https://www.strava.com/api/v3/segments/starred',
+                        headers: {
+                            Accept: 'application/json',
+                            'Authorization': 'Bearer ' + bearer
+                        },
+                    })
+                    .done(function(data) {
+                        //console.log('getMyStarredSegments success');
+                        //console.log(data);
+                        for (a = 0; a < data.length; a++) {
+                            segments.push({
+                                id: data[a].id,
+                                name: data[a].name
+                            });
+                        }
+                        //console.log(segments);
+                        dfd.resolve();
+                    })
+                    .fail()
+                    .always(function(data) {
+                        //console.log('getMyStarredSegments always');
+
+                    });
+                return dfd.promise();
+            }
+
+            function getSegmentEfforts() {
+                var dfd = $.Deferred();
+                for (a = 0; a < segments.length; a++) {
+                    var segmentId = segments[a].id;
+                    var segmentName = segments[a].name;
+                    raceStart = new Date($("#raceStart").val()).valueOf();
+                    raceEnd = new Date($("#raceEnd").val()).valueOf();
+                    var page = 1;
+                    $.ajax({
+                        url: 'https://www.strava.com/api/v3/segments/' + segmentId + '/leaderboard?per_page=200&page=' + page + '&club_id=' + clubId + '&date_range=' + dateRange,
+                        headers: {
+                            Accept: 'application/json',
+                            'Authorization': 'Bearer ' + bearer
+                        },
+                        async: false,
+                        success: function(data) {
+                            //console.log('success');
+                            var effortItemStart;
+                            var bodyJson = data;
+                            for (b = 0; b < bodyJson.entries.length; b++) {
+                                var isDupeName = ($.inArray(bodyJson.entries[b].athlete_name, dupeNames) >= 0) ? true : false;
+                                //console.log('a single segment effort');
+                                //console.log(bodyJson.entries[b]);
+                                effortItemStart = new Date(bodyJson.entries[b].start_date_local).valueOf();
+
+                                if (effortItemStart > raceStart && effortItemStart < raceEnd) {
+                                    if (isDupeName)
+                                        dupeNamesInEffortTable = true;
+                                    efforts.push({
+                                        segment_name: segmentName,
+                                        segment: segmentId,
+                                        athlete_name: bodyJson.entries[b].athlete_name,
+                                        elapsed_time: bodyJson.entries[b].elapsed_time,
+                                        rank: bodyJson.entries[b].rank,
+                                        duplicateName: isDupeName
+                                    });
+                                }
+                            }
+                            //console.log(efforts);
+                        },
+                        fail: function() {}
+                    }).always(function() {
+                        //console.log("in always: a: " + a);
+                        //console.log("segments.length - 1: " + (segments.length - 1));
+                        if (a == segments.length - 1)
+                            dfd.resolve();
+                    });
+                }
+                return dfd.promise();
+            }
+
+
+        });
+
+        function capitalizeFirstLetter(string) {
+            return string.charAt(0).toUpperCase() + string.slice(1);
+        }
+
+        function removeDuplicates(myArr, prop) {
+            return myArr.filter((obj, pos, arr) => {
+                return arr.map(mapObj => mapObj[prop]).indexOf(obj[prop]) === pos;
+            });
+        }
+    </script>
 </head>
+
 <body>
 
-  <div class="col-md-6 col-md-offset-3">
-    <div class="control-group col-md-5">
-	  <div class="row">
-	    <h2>CrankDuro</h2>
-	    <p>A friendly group ride for all the glory.</p>
-	  </div>
-	  <div class="form-group row">
-	    <label for="raceStart" class="col-3 col-form-label">Race Start</label>
-	    <input class="form-control" type="datetime" id="raceStart" value="2018-02-06T10:00Z">
-	  </div>
-	  <div class="form-group row">
-	    <label for="raceEnd" class="col-3 col-form-label">Race End</label>
-	    <input class="form-control" type="datetime" id="raceEnd" value="2018-02-06T10:00Z">
-	  </div>
-	  <div class="form-group row">
-	    <button type="button" class="btn btn-primary" id="sendit">SEND IT</button>
-	  </div>
-	  <div id="dupleLabel_container" class="form-group row hidden">
-	    <h2><span class="label label-warning">These racers don't have unique usernames. Check and edit their names below.</span></h2>
-	  </div>
-	  <!--
+    <div class="col-md-6 col-md-offset-3">
+        <div class="control-group col-md-5">
+            <div class="row">
+                <h2>CrankDuro</h2>
+                <p>A friendly group ride for all the glory.</p>
+            </div>
+            <div class="form-group row">
+                <label for="raceStart" class="col-3 col-form-label">Race Start</label>
+                <input class="form-control" type="datetime" id="raceStart" value="2018-02-06T10:00Z">
+            </div>
+            <div class="form-group row">
+                <label for="raceEnd" class="col-3 col-form-label">Race End</label>
+                <input class="form-control" type="datetime" id="raceEnd" value="2018-02-06T10:00Z">
+            </div>
+            <div class="form-group row">
+                <button type="button" class="btn btn-primary" id="sendit">SEND IT</button>
+            </div>
+            <div id="dupleLabel_container" class="form-group row hidden">
+                <h2><span class="label label-warning">These racers don't have unique usernames. Check and edit their names below.</span></h2>
+            </div>
+            <!--
 	  <div class="form-group row">
 	    <button type="button" class="btn btn-success" id="crunchit">CRUNCH DEM NUMBAS</button>
 	  </div>
 	  -->
-    </div>
-	
-    <div class="row">
-      <table id="results" class="table table-striped" cellspacing="0" width="100%">
-      </table>
-	</div>
-	
-    <div class="row spacer10"></div>
+        </div>
 
-	<div id="crunchit_container" class="hidden">
-      <div class="control-group col-md-3" id=>
-        <div class="form-group row">
-	      <button type="button" class="btn btn-success" id="crunchit">CRUNCH DEM NUMBAS</button>
-	    </div>
-	  </div>
-	</div>
-	
-	<div class="row">
-	<div class="col-sm-offset-3 col-sm-6">
-      <table id="scores" class="table table-striped" cellspacing="0" width="100%">
-      </table>
-	</div>
-	</div>
-	
-  </div>
+        <div class="row">
+            <table id="results" class="table table-striped" cellspacing="0" width="100%">
+            </table>
+        </div>
+
+        <div class="row spacer10"></div>
+
+        <div id="crunchit_container" class="hidden">
+            <div class="control-group col-md-3" id=>
+                <div class="form-group row">
+                    <button type="button" class="btn btn-success" id="crunchit">CRUNCH DEM NUMBAS</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-sm-offset-3 col-sm-6">
+                <table id="scores" class="table table-striped" cellspacing="0" width="100%">
+                </table>
+            </div>
+        </div>
+
+    </div>
 
 </body>
+
 </html>
