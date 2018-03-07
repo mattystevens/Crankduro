@@ -26,7 +26,7 @@
             //$("#results_wrapper,#scores_wrapper").hide();
             var raceStart; // = new Date("2018-01-26T00:00:00Z").valueOf();
             var raceEnd; // = new Date("2018-01-27T00:00:00Z").valueOf();
-            var bearer = "";
+            var bearer = "8d00b26dd1c3e8b14312b46b1a74a0db13ac04a8";
             var clubId = 304545;
             //var segments = [12508189];
             //var segments = [4066439,4831219]; // Srugis's Wall, Cranbrook Exit Climb
@@ -34,8 +34,8 @@
             var dateRange = "this_year" //this_week
             var pointsTo = 10;
             var efforts = [];
-            var table;
-            var table2;
+            var resultsTable;
+            var scoresTable;
             //var editor; // use a global for the submit and return data rendering in the examples
             var athletes = [];
             var clubMembers = [];
@@ -54,6 +54,29 @@
                 clubMembers = [];
                 dupeNames = [];
                 dupeNamesInEffortTable = false;
+				resultsColumns = [
+				    {
+                         "title": "Segment",
+                         "data": "segment_name"
+                    },
+                    {
+                        "title": "Racer",
+                        "data": "athlete_name"
+                    },
+                    {
+                        "title": "Segment Time",
+                        "data": "elapsed_time"
+                    },
+                    {
+                        "title": "Segment Rank",
+                        "data": "rank"
+                    },
+                    {
+                        "title": "Duplicate Name",
+                        "data": "duplicateName",
+                        "visible": false
+                    }
+                 ];
                 //$('#results,#scores').removeClass('display').addClass('hidden');
                 $("#results_wrapper,#scores_wrapper,#crunchit_container,#dupleLabel_container").hide();
 
@@ -69,52 +92,30 @@
                             console.log("***segment efforts***");
                             console.log(efforts);
                             console.log('drawing');
-                            if ($.fn.dataTable.isDataTable('#results')) {
-                                table.clear();
-                                table.rows.add(efforts);
-                                table.draw();
-                            } else {
-                                table = $('#results').DataTable({
-                                    data: efforts,
-                                    columns: [{
-                                            "title": "Segment",
-                                            "data": "segment_name"
-                                        },
-                                        {
-                                            "title": "Racer",
-                                            "data": "athlete_name"
-                                        },
-                                        {
-                                            "title": "Segment Time",
-                                            "data": "elapsed_time"
-                                        },
-                                        {
-                                            "title": "Segment Rank",
-                                            "data": "rank"
-                                        },
-                                        {
-                                            "title": "Duplicate Name",
-                                            "data": "duplicateName",
-                                            "visible": false
-                                        }
-                                    ],
-                                    "dom": '<"top"i>rt<"bottom"flp><"clear">',
-                                    "pageLength": 100,
-                                    "createdRow": function(row, data, dataIndex) {
-                                        var data4 = data[4];
-                                        if (data.duplicateName == true)
-                                            $(row).addClass('warning text-white');
-                                    }
-                                });
-                            }
+							
+                            if ($.fn.dataTable.isDataTable('#results'))
+							    resultsTable.destroy();
+
+							resultsTable = $('#results').DataTable({
+								data: efforts,
+								columns: resultsColumns,
+								"dom": '<"top"i>rt<"bottom"flp><"clear">',
+								"pageLength": 100,
+								"createdRow": function(row, data, dataIndex) {
+									var data4 = data[4];
+									if (data.duplicateName == true)
+										$(row).addClass('warning text-white');
+								}
+							});
+							
                             //$('#results').removeClass('hidden').addClass('display');
                             $("#results_wrapper").show();
                             $('#results:not(:has(caption))').prepend('<caption class="text-primary">Segment Efforts</caption>');
-                            table.columns.adjust().draw();
+                            resultsTable.columns.adjust().draw();
                             $("#crunchit_container").removeClass("hidden").show();
                             if (dupeNamesInEffortTable)
                                 $("#dupleLabel_container").removeClass("hidden").show();
-                            table.MakeCellsEditable({
+                            resultsTable.MakeCellsEditable({
                                 "onUpdate": cellEditCallback,
                                 "columns": [1]
                             });
@@ -128,51 +129,51 @@
                 console.log('clicked crunchit');
                 console.log(efforts);
                 buildResults();
+				scoresColumns = [
+				    {
+                        "title": "Racer",
+                        "data": "athlete_name"
+                    },
+                    {
+                        "title": "Segments Finished",
+                        "data": "segmentsCompleted"
+			        },
+                    {
+                        "title": "Total Time",
+                        "data": "totalTime"
+                    },
+                    {
+                        "title": "Place",
+                        "data": "finalRank"
+                    }
+                ];
                 console.log("after mark buildResults");
                 console.log(athletes);
-                if ($.fn.dataTable.isDataTable('#scores')) {
-                    table2.clear();
-                    table2.rows.add(athletes);
-                    table2.draw();
-                } else {
-                    table2 = $('#scores').DataTable({
-                        data: athletes,
-                        columns: [{
-                                "title": "Racer",
-                                "data": "athlete_name"
-                            },
-                            {
-                                "title": "Segments Finished",
-                                "data": "segmentsCompleted"
-                            },
-                            {
-                                "title": "Total Time",
-                                "data": "totalTime"
-                            },
-                            {
-                                "title": "Place",
-                                "data": "finalRank"
-                            }
-                        ],
-                        "dom": '<"top"i>rt<"bottom"flp><"clear">',
-                        "pageLength": 100,
-                        "createdRow": function(row, data, dataIndex) {
-                            switch (data.finalRank) {
-                                case 1:
-                                    $(row).addClass('success text-white');
-                                    break;
-                                case 'DNF':
-                                    $(row).addClass('warning text-white');
-                                    break;
-                            }
+                if ($.fn.dataTable.isDataTable('#scores'))
+                    scoresTable.destroy();
 
-                        }
-                    });
-                }
+				scoresTable = $('#scores').DataTable({
+					data: athletes,
+					columns: scoresColumns,
+					"dom": '<"top"i>rt<"bottom"flp><"clear">',
+					"pageLength": 100,
+					"createdRow": function(row, data, dataIndex) {
+						switch (data.finalRank) {
+							case 1:
+								$(row).addClass('success text-white');
+								break;
+							case 'DNF':
+								$(row).addClass('warning text-white');
+								break;
+						}
+
+					}
+				});
+					
                 //$('#scores').removeClass('hidden').addClass('display');
                 $("#scores_wrapper").show();
                 $('#scores:not(:has(caption))').prepend('<caption class="text-success">Results</caption>');
-                table2.columns.adjust().draw();
+                scoresTable.columns.adjust().draw();
 
                 $('html, body').animate({
                     scrollTop: $("#scores").offset().top
